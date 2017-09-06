@@ -26,21 +26,25 @@ app.get('/facebook/receive', (req, res) => {
 
 app.post('/facebook/receive', function (req, res) {
     var data = req.body;
-
     // Make sure this is a page subscription
     if (data.object === 'page') {
 
         // Iterate over each entry - there may be multiple if batched
         data.entry.forEach(function (entry) {
+   
             var pageID = entry.id;
             var timeOfEvent = entry.time;
-
             // Iterate over each messaging event
+
             entry.messaging.forEach(function (event) {
-                if (event.message) {
+                if (event.message && pageID != event.sender.id) {
                     receivedMessage(event);
-                } else {
-                    console.log("Webhook received unknown event: ", event);
+                } else if(event.referral) {
+
+                    decryptHash(event);
+
+                }else {
+                    console.log("Webhook received unknown event: ");
                 }
             });
         });
@@ -60,20 +64,20 @@ function receivedMessage(event) {
     var timeOfMessage = event.timestamp;
     var message = event.message;
 
-    console.log("Received message for user %d and page %d at %d with message:",
-        senderID, recipientID, timeOfMessage);
-    console.log(JSON.stringify(message));
+    // console.log("Received message for user %d and page %d at %d with message:",
+        // senderID, recipientID, timeOfMessage);
+    // console.log(JSON.stringify(message));
 
     var messageId = message.mid;
 
     var messageText = message.text;
-    var messageAttachments = message.attachments;
+    // var messageAttachments = message.attachments;
 
-    if (messageText) {
-                sendTextMessage(senderID, messageText);
-    } else if (messageAttachments) {
-        sendTextMessage(senderID, "Message with attachment received");
-    }
+    // if (messageText) {
+    sendTextMessage(senderID, messageText);
+    // } else if (messageAttachments) {
+        // sendTextMessage(senderID, "Message with attachment received");
+    // }
 }
 
 
@@ -94,18 +98,15 @@ function sendTextMessage(recipientId, messageText) {
     }
 
     function callback(error, response, body){
-
         if(!error && response.statusCode == 200){
-            messageData.message.text = 'Retornou';
+            console.log('Retorno do node red ', body);
+            messageData.message.text = body.output.text[0]; // Watson Response.
         }else{
             messageData.message.text = 'Erro ocorreu';
         }
         callSendAPI(messageData);
     }
-    request(options, callback);
-
-
-    
+    request(options, callback);    
 }
 
 
@@ -120,15 +121,51 @@ function callSendAPI(messageData) {
         if (!error && response.statusCode == 200) {
             var recipientId = body.recipient_id;
             var messageId = body.message_id;
-
             console.log("Successfully sent generic message with id %s to recipient %s",
                 messageId, recipientId);
         } else {
-            console.error("Unable to send message.");
-            console.error(response);
+            console.error("Unable to send message. ", response.statusCode );
+            // console.error(response);
             console.error(error);
         }
     });
+}
+
+
+function decryptHash(event){
+    
+    // Do the decypt function , copy it from old code.. 
+    var hash = event.referral.ref;
+    // Call the function here.
+    var decrypted = 'username+token';
+    
+    // Save it on context. 
+    var recipientId = event.sender.id;
+    var messageData = {
+        recipient: {
+            id: recipientId
+        },
+        message: {
+            text: ' '
+        },
+        hash: decrypted
+    };
+
+    var options = {
+        uri: NODE_RED_URL,
+        method: 'POST',
+        json: messageData
+    }
+
+    function callback(error, response, body){
+        if(!error && response.statusCode == 200){
+            console.log('Hash Saved on context');
+        }else{
+            console.log('Um erro ecorreu!');
+        }
+    }
+    request(options, callback); 
+
 }
 
 

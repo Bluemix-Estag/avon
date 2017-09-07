@@ -239,7 +239,7 @@ function buildButtonsMessage(messageData, body, userFirstName, callback) {
 
 
 function calculatePengindPayment(messageData, watsonData) {
-
+    console.log('Calculating pending payment method invoked ..');
     var hash = watsonData.context.hash;
     var decrypted = decrypt(hash);
 
@@ -255,11 +255,11 @@ function calculatePengindPayment(messageData, watsonData) {
         }
     }
 
-    buildPaymentCalculatingBody(watson.pendingPayments, options, function (options) {
+    buildPaymentCalculatingBody(watsonData.context.pendingPayments, options, function (options) {
         request(options, function (error, response, body) {
             if (!error && response.statusCode == 200) {
                 body = JSON.parse(body);
-                messageData.message.text = 'calculando..';
+                messageData.message.text = 'Segue a linha digitável do seu boleto ' + body.newBillNumber.replace(/ /g,'.');
                 callSendAPI(messageData);
             } else {
                 messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!"
@@ -277,16 +277,16 @@ function buildPaymentCalculatingBody(pendingPayments, options, callback) {
         cmpgnNr: pendingPayments.cmpgnNr,
         pymtSlpBrCdNr: pendingPayments.barCdNr,
         slpNr: pendingPayments.billNr,
-        pymtDtFrCalc: moment.unix(pendingPayments.billingDt).format("YYYY-MM-DD"),
-        pymtDueDt: moment.unix(pendingPayments.dueDt).format("YYYY-MM-DD"),
+        pymtDtFrCalc: moment(pendingPayments.billingDt).format("YYYY-MM-DD"),
+        pymtDueDt: moment(pendingPayments.dueDt).format("YYYY-MM-DD"),
         ordOrgAmt: pendingPayments.amount,
         billCnt: "1",
         fineDscntAmt: "0",
         intrstAmt: "90",
         bnkcd: "033-7",
-        pymtSlpExpDt: moment.unix(pendingPayments.billXpirtnDt).format("YYYY-MM-DD")
+        pymtSlpExpDt: moment(pendingPayments.billXpirtnDt).format("YYYY-MM-DD")
     }
-    options.body = body;
+    options.body = JSON.stringify(body);
     callback(options);
 }
 
@@ -383,8 +383,8 @@ function savePendingPaymentsOnContext(messageData, pendingPayments) {
 }
 
 function decrypt(hash) {
-    // Find the correct way
-    return key.decrypt(hash, 'base64', 'utf8');
+    hash = hash.replace(new RegExp(" ","g"),"+");
+    return key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ","g"),"+");
 }
 // Listen on the specified port
 app.listen(port, function () {

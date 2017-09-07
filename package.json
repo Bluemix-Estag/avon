@@ -8,9 +8,11 @@
     "start": "node server"
   },
   "dependencies": {
+    "body-parser": "*",
+    "dotenv": "*",
     "express": "*",
     "request": "*",
-    "body-parser": "*"
+    "ursa": "*"
   },
   "author": "Rabah Zeineddine",
   "license": "ISC"

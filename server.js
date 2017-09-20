@@ -569,9 +569,10 @@ function saveHashAndRepresentativeOnContext(event) {
         hash: hash
     };
     // Get representatives and save it with hash to the context.
-    getRepresentativeData(messageData, function (representative) {
+    getRepresentativeData(messageData, function (representative,err) {
 
-        messageData.representative = representative;
+        if(!err) messageData.representative = representative;
+        else messageData.invalidToken = true;
         // Save it on conversation's context.
 
         var options = {
@@ -613,11 +614,12 @@ function getRepresentativeData(messageData, callback) {
         if (!error && response.statusCode == 200) {
             console.log('AVON\'s API returned successfully..');
             body = JSON.parse(body);
-            callback(body.data.representatives[0])
+            callback(body.data.representatives[0], null)
         } else {
             console.log('Error on requesting AVON\'s representative API..');
-            messageData.message.text = "Um erro ocorreu ao recuperar seus dados. tente mais tarde!"
-            callSendAPI(messageData);
+            // messageData.message.text = "Um erro ocorreu ao recuperar seus dados. tente mais tarde!"
+            // callSendAPI(messageData);
+            callback(null,true);
         }
     }
     console.log('Making request to AVON\'s API..');
@@ -627,12 +629,22 @@ function getRepresentativeData(messageData, callback) {
 
 
 function decrypt(hash) {
-    if (key != null) {
+    var decrypted;
+    // if (key != null) {
+    //     hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+    //     decrypted =  key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+    // } else {
+    //     decrypted =  'username|token'; // if private key passed worng..
+    // }
+    try {
         hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-        return key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
-    } else {
-        return 'username|token'; // if private key passed worng..
+        decrypted =  key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+    } catch (error) {
+        console.log('Invlalid hash passed or private key');
+        decrypted =  'username|token'; // if private key passed worng..
     }
+
+    return decrypted;
 }
 
 

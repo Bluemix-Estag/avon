@@ -10,7 +10,7 @@ below
 
 | Attribute | Value |
 | --- | --- |
-Page_id | Your facebook page id. ex: 270627923401307 |
+Page_id | AVON's facebook page id. ex: 270627923401307 ( you can use this id for test ) |
 | HASH | generated RSA HASH via AVON website |
 
 

@@ -11,6 +11,8 @@
     "body-parser": "^1.17.2",
     "dotenv": "^4.0.0",
     "express": "^4.15.4",
+    "faker": "^4.1.0",
+    "json-schema-faker": "^0.5.0-rc11",
     "moment": "^2.18.1",
     "request": "^2.81.0",
     "ursa": "^0.9.4"

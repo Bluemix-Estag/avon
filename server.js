@@ -1,20 +1,28 @@
+/**
+ * @author Rabah Zeineddine
+ */
+
+
 var express = require('express');
 var bodyParser = require('body-parser');
 var app = express();
 var request = require('request');
 var moment = require('moment');
+
+
 app.use(bodyParser.json());
 var port = process.env.PORT || 5000;
 app.set('port', port);
 
+
 var fs = require('fs')
-, ursa = require('ursa');
+    , ursa = require('ursa');
 key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
 
 require('dotenv').load(); // Load .env file to process.. 
 
 
-
+// Facebook's Webhook validation 
 app.get('/facebook/receive', (req, res) => {
     if (req.query['hub.mode'] === 'subscribe' &&
         req.query['hub.verify_token'] === process.env.FB_ACCESS_TOKEN) {
@@ -26,7 +34,7 @@ app.get('/facebook/receive', (req, res) => {
     }
 });
 
-
+// Facebook receive messages
 app.post('/facebook/receive', function (req, res) {
     var data = req.body;
     // Make sure this is a page subscription
@@ -39,17 +47,21 @@ app.post('/facebook/receive', function (req, res) {
             if (entry.messaging) {
                 entry.messaging.forEach(function (event) {
                     if (event.message && pageID != event.sender.id) {
-                        receivedMessage(event);
+                        console.log('Received text message. ');
+                        var senderID = event.sender.id;
+                        var messageText = event.message.text;
+                        sendTextMessage(senderID, messageText);
                     } else if (event.referral) {
                         // Get Hash params using facebook messenger link..
-                        saveHashOnContext(event);
+                        saveHashAndRepresentativeOnContext(event);
                     } else {
-                        console.log("Webhook received unknown event: ");
+                        // console.log("Webhook received unknown event: ");
                     }
                 });
             } else if (entry.standby) {
                 entry.standby.forEach(function (event) {
                     if (event.postback) {
+                        console.log(event);
                         receivedPostback(event);
                     }
                 })
@@ -75,20 +87,6 @@ function receivedPostback(event) {
     sendTextMessage(senderID, title);
 }
 
-function receivedMessage(event) {
-    var senderID = event.sender.id;
-    var recipientID = event.recipient.id;
-    var timeOfMessage = event.timestamp;
-    var message = event.message;
-
-    console.log("Received message for user %d and page %d at %d with message:",
-        senderID, recipientID, timeOfMessage);
-
-    var messageId = message.mid;
-    var messageText = message.text;
-
-    sendTextMessage(senderID, messageText);
-}
 
 function sendTextMessage(recipientId, messageText) {
     var messageData = {
@@ -117,120 +115,271 @@ function sendTextMessage(recipientId, messageText) {
 }
 
 function reactToContextAction(messageData, watsonData) {
-    // var action = watsonData.context.action;
-    var action = getAction(watsonData); // Fake for test 
+
+    var action = watsonData.output.action;
+
     switch (action) {
         case "representative/pending":
-            getRepresentativePending(messageData, watsonData);
+            getPendingPayments(messageData, watsonData);
             break;
         case 'calculatePendingPayment':
             calculatePengindPayment(messageData, watsonData);
             break;
         default:
-            messageData.message.text = watsonData.output.text[0];
-            callSendAPI(messageData);
+            // Check for quick_reply/buttons answer, otherwise send a normal message.
+            // console.log('Watson Data: ', JSON.stringify(watsonData,null, 2));
+
+            if (watsonData.output.attachments != null) {
+                buildAttachmentsMessage(messageData, watsonData);
+            } else
+                if (watsonData.output.quick_replies != null) {
+                    messageData.message = 'test text nefore video';
+                    buildQuickReplies(messageData, watsonData, function (messageData) {
+                        callSendAPI(messageData);
+                    });
+                } else if (watsonData.output.buttons != null) {
+                    buildButtonsMessage(messageData, watsonData, function (messageData) {
+                        callSendAPI(messageData);
+                    });
+                } else if (watsonData.output.text[0] != null) {
+                    messageData.message.text = watsonData.output.text[0];
+                    callSendAPI(messageData);
+                }
+
+
             break;
     }
 }
 
-// Mock actions..
-function getAction(watsonData) {
-    switch (watsonData.input.text) {
-        case 'debitos pendentes':
-            return 'representative/pending';
-            break;
-        case 'Sim':
-            return 'calculatePendingPayment'
-            break;
-        default:
-            return 'normal';
-            break;
-    }
+function buildAttachmentsMessage(messageData, watsonData) {
+
+    var attachments = watsonData.output.attachments;
+    console.log('tamanho: ', attachments.length);
+    iterateAndSendAttachments(attachments, 0, messageData, function (response) {
+        if (response.error == false) {
+            console.log('Completed');
+            delete watsonData.output.attachments;
+            reactToContextAction(messageData, watsonData);
+        }
+    });
+
+
 }
 
-function getRepresentativePending(messageData, watsonData) {
-
-    var hash = watsonData.context.hash;
-    var decrypted = decrypt(hash);
-    var options = {
-        uri: process.env.REPRESENTATIVE_INFORMATION_URL + '?mrktCd=BR&langCd=pt',
-        method: 'GET',
-        headers: {
-            devKey: process.env.devKey,
-            acctNr: decrypted.split("+")[0],
-            Authentication: 'Token',
-            'X-Sec-Token': decrypted.split("+")[1]
+function iterateAndSendAttachments(attachments, index, messageData, callback) {
+    var msgData = {
+        recipient: {
+            id: messageData.recipient.id
         }
     }
+    console.log('Iterate and send attachments method invoked.. ');
+    console.log('index: ', index);
 
-    function callback(error, response, body) {
-        if (!error && response.statusCode == 200) {
-            body = JSON.parse(body);
-            saveRepresentativesOnContext(messageData, body.data.representatives[0]);
-            getPendingPayments(messageData, watsonData, body.data.representatives[0].profilePersonal.firstName);
-        } else {
-            messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!"
-            callSendAPI(messageData);
+    if (index >= attachments.length) {
+        // Break the recursive methods..
+        callback({ error: false });
+    } else {
+
+        if (attachments[index].type == 'text') {
+            msgData['message'] = {
+                text: attachments[index].value
+            }
+            callSendAPI(msgData, function (err) {
+                if (err) {
+                    console.log('an error occured while sending text message, ', err)
+                    setTimeout(() => {
+                        iterateAndSendAttachments(attachments, index, msgData, callback);
+                    }, 2000);
+                } else {
+                    console.log('a text message was sent..');
+                    iterateAndSendAttachments(attachments, index + 1, msgData, callback);
+                }
+            });
+        } else if (attachments[index].type == 'image' || attachments[index].type == 'video') {
+            buildMediaReply(msgData, attachments[index].value, attachments[index].type, function (msgData) {
+                callSendAPI(msgData, function (err) {
+                    if (err) {
+                        console.log('an error occured while sending media message, ', err)
+                        setTimeout(() => {
+                            iterateAndSendAttachments(attachments, index, msgData, callback);
+                        }, 2000);
+                    } else {
+                        console.log('a media message was sent..');
+                        iterateAndSendAttachments(attachments, index + 1, msgData, callback);
+                    }
+                });
+
+            });
+        } else if (attachments[index].type == 'image/quick_reply') {
+            buildQuickAttachmentReply(msgData, attachments[index], function (msgData) {
+                callSendAPI(msgData, function (err) {
+                    if (err) {
+                        console.log('an error occured while sending media message, ', err)
+                        setTimeout(() => {
+                            iterateAndSendAttachments(attachments, index, msgData, callback);
+                        }, 2000);
+                    } else {
+                        console.log('a media message was sent..');
+                        iterateAndSendAttachments(attachments, index + 1, msgData, callback);
+                    }
+                });
+            })
+        } else if (attachments[index].type == 'text/quick_reply') {
+            buildTextQuickReply(msgData, attachments[index], function (msgData) {
+                callSendAPI(msgData, function (err) {
+                    if (err) {
+                        console.log('an error occured while sending text quick reply message, ', err)
+                        setTimeout(() => {
+                            iterateAndSendAttachments(attachments, index, msgData, callback);
+                        }, 2000);
+                    } else {
+                        console.log('a text quick reply message was sent..');
+                        iterateAndSendAttachments(attachments, index + 1, msgData, callback);
+                    }
+                });
+            });
         }
+
     }
-    request(options, callback);
+
 }
 
 
-function getPendingPayments(messageData, watsonData, userFirstName) {
+
+function getPendingPayments(messageData, watsonData) {
 
     console.log('Get pending payments method inoked..');
     var hash = watsonData.context.hash;
     var decrypted = decrypt(hash);
 
     var options = {
-        uri: process.env.PENDING_PAYMENTS_URL + '?mrktCd=BR&langCd=pt',
+        uri: process.env.PENDING_PAYMENTS_URL,
         method: 'GET',
         headers: {
+            'Content-Type': 'application/json',
             devKey: process.env.devKey,
-            acctNr: decrypted.split("+")[0],
-            Authentication: 'Token',
-            impersAccNr: 'UNKNOWN',
-            'X-Sec-Token': decrypted.split("+")[1]
+            acctNr: parseInt(decrypted.split("|")[0].replace(/0/g, "")),
+            'X-Sec-Token': decrypted.split("|")[1]
         }
     }
+
     function callback(error, response, body) {
-        if (!error && response.statusCode == 200) {
+        if (!error) {
             body = JSON.parse(body);
-
-            savePendingPaymentsOnContext(messageData, body);
-            buildButtonsMessage(messageData, body, userFirstName, function (messageData) {
-                callSendAPI(messageData);
+            savePendingPaymentsOnContext(messageData, body, function (data, err) {
+                if (err) {
+                    messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!";
+                    callSendAPI(messageData);
+                } else {
+                    reactToContextAction(messageData, data);
+                }
             });
-
         } else {
-            messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!"
+            console.log('error: ', JSON.stringify(response, null, 2));
+            messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!";
             callSendAPI(messageData);
         }
     }
     request(options, callback);
 }
 
-function buildButtonsMessage(messageData, body, userFirstName, callback) {
 
+
+function savePendingPaymentsOnContext(messageData, pendingPayments, callback) {
+
+    messageData.message.text = '.';
+    console.log('Received pending payments data from AVON\'s API ', JSON.stringify(pendingPayments, null, 2));
+    var options = {
+        uri: process.env.NODE_RED_URL,
+        method: 'POST',
+        json: messageData
+    }
+
+    // Como nao temos usuario com debitos pendentes, vamos mockar para simulacao
+    var random = Math.floor(Math.random() * 2); // for mock use.
+    if (pendingPayments.length == 1 && pendingPayments[0].errCd != null && random == 0) {
+
+
+        if (pendingPayments[0].errCd == "301" || pendingPayments[0].errCd == "302") {
+            // The security token is expired
+            // avisa o conversation para falar para o usuario ir no site da avon e entrar pelo link deles.
+            messageData.invalidToken = true;
+
+        }
+
+
+        pendingPayments = null;
+        messageData.pendingPayments = pendingPayments;
+        request(options, callbackRequest);
+    } else {
+        // pendingPayments
+        // Mock if there is no pendingPayments for test
+        if (pendingPayments[0].errCd != null) {
+
+            pendingPayments = []
+            require('./pendingPayments')(function (pending) {
+                sortPendingPayments(pending, function (sortedPending) {
+
+
+
+                    var str = (sortedPending.length > 1) ? "débitos" : "débito";
+                    pendingPayments.push({ type: "text", value: "Você tem " + sortedPending.length + " " + str + " em aberto: " });
+                    sortedPending.forEach(function (payment) {
+                        pendingPayments.push({
+                            type: "text",
+                            value: " Companha: " + payment.cmpgnNr + "/" + payment.cmpgnYr + ".\u000A Valor debito: R$" + payment.amount + "\u000A Linha Digitável do boleto: " + payment.billNr
+                        })
+                    });
+
+
+                    messageData.pendingPayments = pendingPayments;
+
+                    console.log(pendingPayments);
+                    request(options, callbackRequest);
+
+
+                });
+            })
+        } else {
+            //Set for api return..
+
+        }
+    }
+
+    function callbackRequest(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            console.log('pendingPayments Saved on context');
+            callback(body, null);
+        } else {
+            console.log('Um erro ecorreu!');
+            callback(body, true);
+        }
+    }
+}
+
+
+function sortPendingPayments(pendingPayments, callback) {
+
+    pendingPayments.sort(function (a, b) {
+        if (parseInt(a.cmpgnYr) == parseInt(b.cmpgnYr)) {
+            return (a.cmpgnNr - b.cmpgnNr);
+        } else {
+            return parseInt(a.cmpgnYr) - parseInt(b.cmpgnYr);
+        }
+    })
+
+    callback(pendingPayments);
+
+}
+
+function buildButtonsMessage(messageData, body, callback) {
     messageData.message = {
         "attachment": {
             "type": "template",
             "payload": {
                 "template_type": "button",
-                "text": userFirstName + ', você tem R$' + (body.amountPOff - body.amount) + ' em aberto, deseja que eu gere um novo boleto?',
-                "buttons": [
-                    {
-                        "type": "postback",
-                        "title": "Sim",
-                        "payload": "GENERATE_BOLETO"
-                    },
-                    {
-                        "type": "postback",
-                        "title": "Nao",
-                        "payload": "DONT_GENERATE"
-                    }
-                ]
+                "text": body.output.text[0] || ' ',
+                "buttons": body.output.buttons  // Came from conversation!
             }
         }
     }
@@ -238,35 +387,122 @@ function buildButtonsMessage(messageData, body, userFirstName, callback) {
 }
 
 
-function calculatePengindPayment(messageData, watsonData) {
-    console.log('Calculating pending payment method invoked ..');
-    var hash = watsonData.context.hash;
-    var decrypted = decrypt(hash);
+function buildQuickReplies(messageData, body, callback) {
+    // console.log(JSON.stringify(body,null,2));
+    messageData.message = {
+        "text": body.output.text[0] || 'proximo',
+        "quick_replies": body.output.quick_replies
+    }
 
-    var options = {
-        uri: process.env.CALCULATE_PENDING_URL + '?mrktCd=BR&langCd=pt',
-        method: 'POST',
-        headers: {
-            devKey: process.env.devKey,
-            acctNr: decrypted.split("+")[0],
-            Authentication: 'Token',
-            'X-Sec-Token': decrypted.split("+")[1],
-            'Content-Type': 'application/json'
+    callback(messageData);
+}
+
+function buildTextQuickReply(msgData, attachment, callback) {
+    msgData.message = {
+        "text": attachment.value || 'proximo',
+        "quick_replies": attachment.quick_replies
+    }
+    callback(msgData)
+}
+
+function buildQuickAttachmentReply(msgData, attachment, callback) {
+
+    msgData.message = {
+        "attachment": {
+            "type": attachment.type.split('/')[0],
+            "payload": {
+                "url": attachment.value
+            }
+        },
+        "quick_replies": attachment.quick_replies
+    }
+
+    callback(msgData);
+
+
+}
+
+function buildMediaReply(messageData, value, type, callback) {
+    console.log('Build video message method invoked..');
+    var msg = {
+        recipient: { id: messageData.recipient.id }
+    }
+    msg.message = {
+        "attachment": {
+            "type": type,
+            "payload": {
+                "url": value
+            }
         }
     }
+    console.log(JSON.stringify(msg, null, 2));
+    callback(msg);
+}
+
+
+
+function calculatePengindPayment(messageData, watsonData) {
+    console.log('Calculating pending payment method invoked ..');
+    // var hash = watsonData.context.hash;
+    // var decrypted = decrypt(hash);
+
+    // var options = {
+    //     uri: process.env.CALCULATE_PENDING_URL + '?mrktCd=BR&langCd=pt',
+    //     method: 'POST',
+    //     headers: {
+    //         devKey: process.env.devKey,
+    //         acctNr: decrypted.split("+")[0],
+    //         Authentication: 'Token',
+    //         'X-Sec-Token': decrypted.split("+")[1],
+    //         'Content-Type': 'application/json'
+    //     }
+    // }
 
     buildPaymentCalculatingBody(watsonData.context.pendingPayments, options, function (options) {
         request(options, function (error, response, body) {
             if (!error && response.statusCode == 200) {
                 body = JSON.parse(body);
-                messageData.message.text = 'Segue a linha digitável do seu boleto ' + body.newBillNumber.replace(/ /g,'.');
-                callSendAPI(messageData);
+                body.newBillNumber = body.newBillNumber.replace(/ /g, '.');
+                messageData.calculatedPengindPayment = body;
+                sendToConversation(messageData, function (data) {
+                    callSendAPI(messageData);
+                });
+
+                // messageData.message.text = 'Segue a linha digitável do seu boleto ' + body.newBillNumber.replace(/ /g, '.');
+
             } else {
                 messageData.message.text = "Um erro ocorreu ao validar seu debito pendente. tente mais tarde!"
                 callSendAPI(messageData);
             }
         });
     })
+}
+
+function sendToConversation(messageData, callback) {
+
+    messageData.message.text = '.';
+    var options = {
+        uri: process.env.NODE_RED_URL,
+        method: 'POST',
+        json: messageData
+    }
+
+    function callbackRequest(error, response, body) {
+        if (!error && response.statusCode == 200) {
+
+            messageData.message.text = body.output.text[0];
+            callback(messageData);
+        } else {
+            console.log('Um erro ecorreu!');
+        }
+    }
+    request(options, callbackRequest);
+
+
+
+
+
+
 }
 
 function buildPaymentCalculatingBody(pendingPayments, options, callback) {
@@ -292,7 +528,8 @@ function buildPaymentCalculatingBody(pendingPayments, options, callback) {
 
 
 
-function callSendAPI(messageData) {
+function callSendAPI(messageData, callback) {
+    console.log('Call send api method invoked..')
     request({
         uri: 'https://graph.facebook.com/v2.6/me/messages',
         qs: { access_token: process.env.PAGE_ACCESS_TOKEN },
@@ -305,88 +542,115 @@ function callSendAPI(messageData) {
             var messageId = body.message_id;
             console.log("Successfully sent generic message with id %s to recipient %s",
                 messageId, recipientId);
+            if (callback) {
+                callback();
+            }
         } else {
             console.error("Unable to send message. ", response.statusCode);
-            // console.error(response);
-            console.error(error);
+            console.error(body);
+            if (callback) {
+                callback(error);
+            }
         }
     });
 }
 
-
-function saveHashOnContext(event) {
-
-    // Do the decypt function , copy it from old code.. 
-    var hash = event.referral.ref;
-
-    // Save it on context. 
-    var recipientId = event.sender.id;
+// Checked 
+function saveHashAndRepresentativeOnContext(event) {
+    console.log('Saving hash and representative informations.. ');
+    var hash = event.referral.hash || event.referral.ref; // get ref instead of hash when hash is not available.
     var messageData = {
         recipient: {
-            id: recipientId
+            id: event.sender.id
         },
         message: {
-            text: ' '
+            text: 'oi'
         },
         hash: hash
     };
+    // Get representatives and save it with hash to the context.
+    getRepresentativeData(messageData, function (representative) {
 
-    var options = {
-        uri: process.env.NODE_RED_URL,
-        method: 'POST',
-        json: messageData
-    }
+        messageData.representative = representative;
+        // Save it on conversation's context.
 
-    function callback(error, response, body) {
-        if (!error && response.statusCode == 200) {
-            console.log('Hash Saved on context');
-        } else {
-            console.log('Um erro ecorreu!');
+        var options = {
+            uri: process.env.NODE_RED_URL,
+            method: 'POST',
+            json: messageData
         }
-    }
-    request(options, callback);
+        console.log('Saving data on context..');
+        function callback(error, response, body) {
+            if (!error && response.statusCode == 200) {
+                console.log('Hash and representative data saved on context..');
+                messageData.message.text = body.output.text[0];
+                callSendAPI(messageData);
+            } else {
+                console.log('Um erro ecorreu!');
+                messageData.message.text = "Um erro ocorreu ao recuperar seus dados. tente mais tarde!";
+                callSendAPI(messageData);
+            }
+        }
+        request(options, callback);
+    });
 }
 
-function saveRepresentativesOnContext(messageData, representatives) {
-    // Save it on context. 
-    messageData.representatives = representatives;
+// Checked 
+function getRepresentativeData(messageData, callback) {
+    console.log('Getting representative data method invoked..');
+    var hash = messageData.hash;
+    var decrypted = decrypt(hash);
     var options = {
-        uri: process.env.NODE_RED_URL,
-        method: 'POST',
-        json: messageData
-    }
-    function callback(error, response, body) {
-        if (!error && response.statusCode == 200) {
-            console.log('representatives Saved on context');
-        } else {
-            console.log('Um erro ecorreu!');
+        uri: process.env.REPRESENTATIVE_INFORMATION_URL + '?mrktCd=BR&langCd=pt',
+        method: 'GET',
+        headers: {
+            devKey: process.env.devKey,
+            acctNr: parseInt(decrypted.split("|")[0].replace(/0/g, "")),
+            'Content-Type': 'application/json'
         }
     }
-    request(options, callback);
+    function callbackRequest(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            console.log('AVON\'s API returned successfully..');
+            body = JSON.parse(body);
+            callback(body.data.representatives[0])
+        } else {
+            console.log('Error on requesting AVON\'s representative API..');
+            messageData.message.text = "Um erro ocorreu ao recuperar seus dados. tente mais tarde!"
+            callSendAPI(messageData);
+        }
+    }
+    console.log('Making request to AVON\'s API..');
+    request(options, callbackRequest);
 }
 
-function savePendingPaymentsOnContext(messageData, pendingPayments) {
-    messageData.pendingPayments = pendingPayments;
-    var options = {
-        uri: process.env.NODE_RED_URL,
-        method: 'POST',
-        json: messageData
-    }
-    function callback(error, response, body) {
-        if (!error && response.statusCode == 200) {
-            console.log('pendingPayments Saved on context');
-        } else {
-            console.log('Um erro ecorreu!');
-        }
-    }
-    request(options, callback);
-}
+
 
 function decrypt(hash) {
-    hash = hash.replace(new RegExp(" ","g"),"+");
-    return key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ","g"),"+");
+    if (key != null) {
+        hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+        return key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+    } else {
+        return 'username|token'; // if private key passed worng..
+    }
 }
+
+
+
+app.post('/decrypt', function (req, res) {
+    var hash = req.body.hash;
+    hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+    res.status(200).json({
+        decrypted: key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+")
+    });
+});
+
+
+
 // Listen on the specified port
 app.listen(port, function () {
     console.log('Client server listening on port ' + port);
 });
+
+
+

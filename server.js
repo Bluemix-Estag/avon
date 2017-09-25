@@ -15,9 +15,9 @@ var port = process.env.PORT || 5000;
 app.set('port', port);
 
 
-var fs = require('fs')
-    , ursa = require('ursa');
-key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
+// var fs = require('fs')
+    // , ursa = require('ursa');
+// key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
 
 require('dotenv').load(); // Load .env file to process.. 
 
@@ -114,6 +114,8 @@ function sendTextMessage(recipientId, messageText) {
     request(options, callback);
 }
 
+
+// Reage do conversation
 function reactToContextAction(messageData, watsonData) {
 
     var action = watsonData.output.action;
@@ -630,15 +632,11 @@ function getRepresentativeData(messageData, callback) {
 
 function decrypt(hash) {
     var decrypted;
-    // if (key != null) {
-    //     hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-    //     decrypted =  key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
-    // } else {
-    //     decrypted =  'username|token'; // if private key passed worng..
-    // }
+
     try {
-        hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-        decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+        // hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+        // decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+        decrypted='000521|<TOKEN>';
     } catch (error) {
         console.log('Invlalid hash passed or private key');
         decrypted = 'username|token'; // if private key passed worng..
@@ -648,14 +646,6 @@ function decrypt(hash) {
 }
 
 
-
-app.post('/decrypt', function (req, res) {
-    var hash = req.body.hash;
-    hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-    res.status(200).json({
-        decrypted: key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+")
-    });
-});
 
 
 

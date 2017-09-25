@@ -48,7 +48,7 @@ The body content
 and the request header must have two attributes 
 
 ```
-    Content-Type: "Content-Type"
+    Content-Type: "application/json"
     devKey : X5IrjRRjsGzrBvMh5x+vlOBpUGJIRvJl
 ```
 

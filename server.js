@@ -569,9 +569,9 @@ function saveHashAndRepresentativeOnContext(event) {
         hash: hash
     };
     // Get representatives and save it with hash to the context.
-    getRepresentativeData(messageData, function (representative,err) {
+    getRepresentativeData(messageData, function (representative, err) {
 
-        if(!err) messageData.representative = representative;
+        if (!err) messageData.representative = representative;
         else messageData.invalidToken = true;
         // Save it on conversation's context.
 
@@ -619,7 +619,7 @@ function getRepresentativeData(messageData, callback) {
             console.log('Error on requesting AVON\'s representative API..');
             // messageData.message.text = "Um erro ocorreu ao recuperar seus dados. tente mais tarde!"
             // callSendAPI(messageData);
-            callback(null,true);
+            callback(null, true);
         }
     }
     console.log('Making request to AVON\'s API..');
@@ -638,10 +638,10 @@ function decrypt(hash) {
     // }
     try {
         hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-        decrypted =  key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+        decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
     } catch (error) {
         console.log('Invlalid hash passed or private key');
-        decrypted =  'username|token'; // if private key passed worng..
+        decrypted = 'username|token'; // if private key passed worng..
     }
 
     return decrypted;

@@ -15,9 +15,9 @@ var port = process.env.PORT || 5000;
 app.set('port', port);
 
 
-// var fs = require('fs')
-//     , ursa = require('ursa');
-// key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
+var fs = require('fs')
+    , ursa = require('ursa');
+key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
 
 require('dotenv').load(); // Load .env file to process.. 
 
@@ -115,7 +115,7 @@ function sendTextMessage(recipientId, messageText) {
 }
 
 function reactToContextAction(messageData, watsonData) {
-    console.log(watsonData.intents)
+
     // Check the distance between intentions and react in multiple intentions.
     if (.25 > (watsonData.intents[0].confidence - watsonData.intents[1].confidence) && .25 > (watsonData.intents[0].confidence - watsonData.intents[2].confidence) && watsonData.output.nodes_visited[0] != 'Em outros casos' && !watsonData.output.flow) {
         if (watsonData.output.attachments) {
@@ -684,10 +684,9 @@ function decrypt(hash) {
     //     decrypted =  'username|token'; // if private key passed worng..
     // }
     try {
-        // hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-        // decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
-        decrypted = `521|EZVTfPTRA68oo03IlEs4QWGi7JlaCpipZ3SWTELDdg2NH1ZA3n+Ti011NjeIsxb3`;
-    } catch (error) {
+        hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+        decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+           } catch (error) {
         console.log('Invlalid hash passed or private key');
         decrypted = 'username|token'; // if private key passed worng..
     }

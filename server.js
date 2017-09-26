@@ -121,14 +121,14 @@ function reactToContextAction(messageData, watsonData) {
         if (watsonData.output.attachments) {
             watsonData.output.attachments.push({
                 "type": "text/quick_reply",
-                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace('_',' ')}* e *${watsonData.intents[2].intent.replace('_',' ')}*. Então me responda, sobre qual deles vamos conversar agora?`,
+                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* e *${watsonData.intents[2].intent.replace(/_/g,' ')}*. Então me responda, sobre qual deles vamos conversar agora?`,
                 "quick_replies": [{
-                        "title": `${watsonData.intents[1].intent.replace('_',' ')}`,
+                        "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
                         "payload": `button_${watsonData.intents[1].intent}`,
                         "content_type": "text"
                     },
                     {
-                        "title": `${watsonData.intents[2].intent.replace('_',' ')}`,
+                        "title": `${watsonData.intents[2].intent.replace(/_/g,' ')}`,
                         "payload": `button_${watsonData.intents[2].intent}`,
                         "content_type": "text"
                     }
@@ -140,9 +140,9 @@ function reactToContextAction(messageData, watsonData) {
         if (watsonData.output.attachments) {
             watsonData.output.attachments.push({
                 "type": "text/quick_reply",
-                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace('_',' ')}* também.`,
+                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* também.`,
                 "quick_replies": [{
-                    "title": `${watsonData.intents[1].intent.replace('_',' ')}`,
+                    "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
                     "payload": `button_${watsonData.intents[1].intent}`,
                     "content_type": "text"
                 }]

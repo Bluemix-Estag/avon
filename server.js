@@ -15,9 +15,9 @@ var port = process.env.PORT || 5000;
 app.set('port', port);
 
 
-var fs = require('fs')
-    , ursa = require('ursa');
-key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
+// var fs = require('fs')
+//     , ursa = require('ursa');
+// key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
 
 require('dotenv').load(); // Load .env file to process.. 
 
@@ -115,6 +115,41 @@ function sendTextMessage(recipientId, messageText) {
 }
 
 function reactToContextAction(messageData, watsonData) {
+    console.log(watsonData.intents)
+    // Check the distance between intentions and react in multiple intentions.
+    if (.25 > (watsonData.intents[0].confidence - watsonData.intents[1].confidence) && .25 > (watsonData.intents[0].confidence - watsonData.intents[2].confidence) && watsonData.output.nodes_visited[0] != 'Em outros casos' && !watsonData.output.flow) {
+        if (watsonData.output.attachments) {
+            watsonData.output.attachments.push({
+                "type": "text/quick_reply",
+                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace('_',' ')}* e *${watsonData.intents[2].intent.replace('_',' ')}*. Então me responda, sobre qual deles vamos conversar agora?`,
+                "quick_replies": [{
+                        "title": `${watsonData.intents[1].intent.replace('_',' ')}`,
+                        "payload": `button_${watsonData.intents[1].intent}`,
+                        "content_type": "text"
+                    },
+                    {
+                        "title": `${watsonData.intents[2].intent.replace('_',' ')}`,
+                        "payload": `button_${watsonData.intents[2].intent}`,
+                        "content_type": "text"
+                    }
+                ]
+            });
+        }
+    } else if (.25 > (watsonData.intents[0].confidence - watsonData.intents[1].confidence) && watsonData.output.nodes_visited[0] != 'Em outros casos' && !watsonData.output.flow) {
+        console.log(watsonData.intents[1].confidence)
+        if (watsonData.output.attachments) {
+            watsonData.output.attachments.push({
+                "type": "text/quick_reply",
+                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace('_',' ')}* também.`,
+                "quick_replies": [{
+                    "title": `${watsonData.intents[1].intent.replace('_',' ')}`,
+                    "payload": `button_${watsonData.intents[1].intent}`,
+                    "content_type": "text"
+                }]
+            });
+        }
+    }
+    // ** END ** //
 
     var action = watsonData.output.action;
 
@@ -132,19 +167,19 @@ function reactToContextAction(messageData, watsonData) {
             if (watsonData.output.attachments != null) {
                 buildAttachmentsMessage(messageData, watsonData);
             } else
-                if (watsonData.output.quick_replies != null) {
-                    messageData.message = 'test text nefore video';
-                    buildQuickReplies(messageData, watsonData, function (messageData) {
-                        callSendAPI(messageData);
-                    });
-                } else if (watsonData.output.buttons != null) {
-                    buildButtonsMessage(messageData, watsonData, function (messageData) {
-                        callSendAPI(messageData);
-                    });
-                } else if (watsonData.output.text[0] != null) {
-                    messageData.message.text = watsonData.output.text[0];
+            if (watsonData.output.quick_replies != null) {
+                messageData.message = 'test text nefore video';
+                buildQuickReplies(messageData, watsonData, function (messageData) {
                     callSendAPI(messageData);
-                }
+                });
+            } else if (watsonData.output.buttons != null) {
+                buildButtonsMessage(messageData, watsonData, function (messageData) {
+                    callSendAPI(messageData);
+                });
+            } else if (watsonData.output.text[0] != null) {
+                messageData.message.text = watsonData.output.text[0];
+                callSendAPI(messageData);
+            }
 
 
             break;
@@ -177,7 +212,9 @@ function iterateAndSendAttachments(attachments, index, messageData, callback) {
 
     if (index >= attachments.length) {
         // Break the recursive methods..
-        callback({ error: false });
+        callback({
+            error: false
+        });
     } else {
 
         if (attachments[index].type == 'text') {
@@ -323,7 +360,10 @@ function savePendingPaymentsOnContext(messageData, pendingPayments, callback) {
 
 
                     var str = (sortedPending.length > 1) ? "débitos" : "débito";
-                    pendingPayments.push({ type: "text", value: "Você tem " + sortedPending.length + " " + str + " em aberto: " });
+                    pendingPayments.push({
+                        type: "text",
+                        value: "Você tem " + sortedPending.length + " " + str + " em aberto: "
+                    });
                     sortedPending.forEach(function (payment) {
                         pendingPayments.push({
                             type: "text",
@@ -379,7 +419,7 @@ function buildButtonsMessage(messageData, body, callback) {
             "payload": {
                 "template_type": "button",
                 "text": body.output.text[0] || ' ',
-                "buttons": body.output.buttons  // Came from conversation!
+                "buttons": body.output.buttons // Came from conversation!
             }
         }
     }
@@ -425,7 +465,9 @@ function buildQuickAttachmentReply(msgData, attachment, callback) {
 function buildMediaReply(messageData, value, type, callback) {
     console.log('Build video message method invoked..');
     var msg = {
-        recipient: { id: messageData.recipient.id }
+        recipient: {
+            id: messageData.recipient.id
+        }
     }
     msg.message = {
         "attachment": {
@@ -530,9 +572,12 @@ function buildPaymentCalculatingBody(pendingPayments, options, callback) {
 
 function callSendAPI(messageData, callback) {
     console.log('Call send api method invoked..')
+    console.log(`Facebook user: ${messageData.recipient.id}`);
     request({
         uri: 'https://graph.facebook.com/v2.6/me/messages',
-        qs: { access_token: process.env.PAGE_ACCESS_TOKEN },
+        qs: {
+            access_token: process.env.PAGE_ACCESS_TOKEN
+        },
         method: 'POST',
         json: messageData
 
@@ -581,6 +626,7 @@ function saveHashAndRepresentativeOnContext(event) {
             json: messageData
         }
         console.log('Saving data on context..');
+
         function callback(error, response, body) {
             if (!error && response.statusCode == 200) {
                 console.log('Hash and representative data saved on context..');
@@ -610,6 +656,7 @@ function getRepresentativeData(messageData, callback) {
             'Content-Type': 'application/json'
         }
     }
+
     function callbackRequest(error, response, body) {
         if (!error && response.statusCode == 200) {
             console.log('AVON\'s API returned successfully..');
@@ -637,8 +684,9 @@ function decrypt(hash) {
     //     decrypted =  'username|token'; // if private key passed worng..
     // }
     try {
-        hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
-        decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+        // hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
+        // decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
+        decrypted = `521|EZVTfPTRA68oo03IlEs4QWGi7JlaCpipZ3SWTELDdg2NH1ZA3n+Ti011NjeIsxb3`;
     } catch (error) {
         console.log('Invlalid hash passed or private key');
         decrypted = 'username|token'; // if private key passed worng..
@@ -663,6 +711,3 @@ app.post('/decrypt', function (req, res) {
 app.listen(port, function () {
     console.log('Client server listening on port ' + port);
 });
-
-
-

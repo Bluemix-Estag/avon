@@ -121,7 +121,7 @@ function reactToContextAction(messageData, watsonData) {
         if (watsonData.output.attachments) {
             watsonData.output.attachments.push({
                 "type": "text/quick_reply",
-                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* e *${watsonData.intents[2].intent.replace(/_/g,' ')}*. Então me responda, sobre qual deles vamos conversar agora?`,
+                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* e *${watsonData.intents[2].intent.replace(/_/g,' ')}*. Toque no botão abaixo sobre o assunto que deseja conversar.`,
                 "quick_replies": [{
                         "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
                         "payload": `button_${watsonData.intents[1].intent}`,
@@ -140,7 +140,7 @@ function reactToContextAction(messageData, watsonData) {
         if (watsonData.output.attachments) {
             watsonData.output.attachments.push({
                 "type": "text/quick_reply",
-                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* também.`,
+                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* também. Toque no botão abaixo para conversarmos sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}*.`,
                 "quick_replies": [{
                     "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
                     "payload": `button_${watsonData.intents[1].intent}`,

@@ -15,8 +15,8 @@ var port = process.env.PORT || 5000;
 app.set('port', port);
 
 
-var fs = require('fs')
-    , ursa = require('ursa');
+var fs = require('fs'),
+    ursa = require('ursa');
 key = ursa.createPrivateKey(fs.readFileSync('./key.pem'));
 
 require('dotenv').load(); // Load .env file to process.. 
@@ -119,34 +119,40 @@ function reactToContextAction(messageData, watsonData) {
     // Check the distance between intentions and react in multiple intentions.
     if (.25 > (watsonData.intents[0].confidence - watsonData.intents[1].confidence) && .25 > (watsonData.intents[0].confidence - watsonData.intents[2].confidence) && watsonData.output.nodes_visited[0] != 'Em outros casos' && !watsonData.output.flow) {
         if (watsonData.output.attachments) {
-            watsonData.output.attachments.push({
-                "type": "text/quick_reply",
-                "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* e *${watsonData.intents[2].intent.replace(/_/g,' ')}*. Toque no botão abaixo sobre o assunto que deseja conversar.`,
-                "quick_replies": [{
-                        "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
-                        "payload": `button_${watsonData.intents[1].intent}`,
-                        "content_type": "text"
-                    },
-                    {
-                        "title": `${watsonData.intents[2].intent.replace(/_/g,' ')}`,
-                        "payload": `button_${watsonData.intents[2].intent}`,
-                        "content_type": "text"
-                    }
-                ]
-            });
+            var attLength = watsonData.output.attachments.length;
+            if (watsonData.output.attachments[attLength - 1].type != 'text/quick_reply' && watsonData.output.attachments[attLength - 1].type != 'image/quick_reply') {
+                watsonData.output.attachments.push({
+                    "type": "text/quick_reply",
+                    "value": `Certo identifiquei que você também quer falar sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* e *${watsonData.intents[2].intent.replace(/_/g,' ')}*. Toque no botão abaixo sobre o assunto que deseja conversar.`,
+                    "quick_replies": [{
+                            "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
+                            "payload": `button_${watsonData.intents[1].intent}`,
+                            "content_type": "text"
+                        },
+                        {
+                            "title": `${watsonData.intents[2].intent.replace(/_/g,' ')}`,
+                            "payload": `button_${watsonData.intents[2].intent}`,
+                            "content_type": "text"
+                        }
+                    ]
+                });
+            }
         }
     } else if (.25 > (watsonData.intents[0].confidence - watsonData.intents[1].confidence) && watsonData.output.nodes_visited[0] != 'Em outros casos' && !watsonData.output.flow) {
         console.log(watsonData.intents[1].confidence)
         if (watsonData.output.attachments) {
-            watsonData.output.attachments.push({
-                "type": "text/quick_reply",
-                "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* também. Toque no botão abaixo para conversarmos sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}*.`,
-                "quick_replies": [{
-                    "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
-                    "payload": `button_${watsonData.intents[1].intent}`,
-                    "content_type": "text"
-                }]
-            });
+            var attLength = watsonData.output.attachments.length;
+            if (watsonData.output.attachments[attLength - 1].type != 'text/quick_reply' && watsonData.output.attachments[attLength - 1].type != 'image/quick_reply') {
+                watsonData.output.attachments.push({
+                    "type": "text/quick_reply",
+                    "value": `Percebi que você quer saber sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}* também. Toque no botão abaixo para conversarmos sobre *${watsonData.intents[1].intent.replace(/_/g,' ')}*.`,
+                    "quick_replies": [{
+                        "title": `${watsonData.intents[1].intent.replace(/_/g,' ')}`,
+                        "payload": `button_${watsonData.intents[1].intent}`,
+                        "content_type": "text"
+                    }]
+                });
+            }
         }
     }
     // ** END ** //
@@ -686,7 +692,7 @@ function decrypt(hash) {
     try {
         hash = hash.replace(new RegExp(" ", "g"), "+") + "=";
         decrypted = key.decrypt(hash, 'base64', 'utf8').replace(new RegExp(" ", "g"), "+");
-           } catch (error) {
+    } catch (error) {
         console.log('Invlalid hash passed or private key');
         decrypted = 'username|token'; // if private key passed worng..
     }
